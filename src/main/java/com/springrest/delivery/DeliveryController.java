@@ -24,6 +24,8 @@ public class DeliveryController {
 	ArrayList<Agent> agentList = new ArrayList<Agent>();
 	ArrayList<Order> orderList = new ArrayList<Order>();
 	PriorityQueue<Integer> pendingOrders = new PriorityQueue<Integer>();
+	PriorityQueue<Integer> availableAgents = new PriorityQueue<Integer>();
+	Integer orderNum = 1000;
 	
 	@PostMapping("/addAgent")
 	public HttpStatus addAgent(@RequestBody Agent myInput) {
@@ -45,6 +47,7 @@ public class DeliveryController {
 				if(myAgent.getAgentState() == "signed-out") {
 					if(pendingOrders.isEmpty()) { //order pending
 						myAgent.setAgentState("available");
+						availableAgents.add(myAgent.getAgentId());
 					}
 					else  { 
 						Integer orderId = pendingOrders.poll();
@@ -66,18 +69,41 @@ public class DeliveryController {
 	@PostMapping("/agentSignOut")
 	public HttpStatus agentSignOut(@RequestBody Map<String,Integer> agent) {
 		for(Agent myAgent : agentList) {
-			System.out.println(myAgent.getAgentId());
-			System.out.println(agent.get("agentId"));
+			//System.out.println(myAgent.getAgentId());
+			//System.out.println(agent.get("agentId"));
 			
 			if(myAgent.getAgentId().equals(agent.get("agentId"))) {
-				System.out.println("hello2");
+				//System.out.println("hello2");
 				if(myAgent.getAgentState().equals("available")) {
-					System.out.println("hello3");
+					//System.out.println("hello3");
 					myAgent.setAgentState("signed-out");
 				}
 			}
 		}
 		return HttpStatus.CREATED;
+	}
+	
+	@PostMapping("/acceptOrder") 
+	public String acceptOrder(@RequestBody Map<String,Integer> orderBody){
+	
+		//Some Logic Communicating with Wallet Service
+		
+		Order order = new Order(orderNum, "unassigned", -1);
+		orderNum = orderNum + 1;
+		if(!availableAgents.isEmpty()) {
+			Integer agentId = availableAgents.poll();
+			order.setStatus("assigned");
+			order.setAgentId(agentId);
+			
+			for(Agent agent: agentList) {
+				if(agent.getAgentId().equals(agentId)) {
+					agent.setAgentState("unavailable");
+				}
+			}
+		}
+		orderList.add(order);
+		
+		return "h";
 	}
 	
 	@PostMapping("/reInitialize")
