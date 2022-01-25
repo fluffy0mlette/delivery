@@ -3,6 +3,7 @@ package com.springrest.delivery;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Scanner;
@@ -11,6 +12,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -84,13 +86,16 @@ public class DeliveryController {
 	}
 	
 	@PostMapping("/acceptOrder") 
-	public String acceptOrder(@RequestBody Map<String,Integer> orderBody){
+	public Map<String,Integer> acceptOrder(@RequestBody Map<String,Integer> orderBody){
 	
 		//Some Logic Communicating with Wallet Service
 		
 		Order order = new Order(orderNum, "unassigned", -1);
 		orderNum = orderNum + 1;
-		if(!availableAgents.isEmpty()) {
+		if(availableAgents.isEmpty()) {
+			pendingOrders.add(order.getOrderId());
+		}
+		else {
 			Integer agentId = availableAgents.poll();
 			order.setStatus("assigned");
 			order.setAgentId(agentId);
@@ -103,7 +108,28 @@ public class DeliveryController {
 		}
 		orderList.add(order);
 		
-		return "h";
+		return Collections.singletonMap("orderId",order.getOrderId());
+	}
+	
+	@PostMapping("/orderDelivered")
+	public HttpStatus orderDelivered(@RequestBody Map<String, Integer> order) {
+		
+		for(Order myOrder: orderList) {
+			if(myOrder.getOrderId().equals(order.get("orderId"))) {
+				if(myOrder.getStatus() == "assigned") {
+					myOrder.setStatus("delivered");
+					Integer agentId = myOrder.getAgentId();
+					for(Agent myAgent: agentList) {
+						if(myAgent.getAgentId().equals(agentId)) {
+							myAgent.setAgentState("available");
+							availableAgents.add(myAgent.getAgentId());
+						}
+					}
+				}
+			}
+		}
+		
+		return HttpStatus.CREATED;
 	}
 	
 	@PostMapping("/reInitialize")
@@ -165,5 +191,29 @@ public class DeliveryController {
 	
 			return HttpStatus.CREATED;	
 		}
+	
+	@GetMapping("/order/{orderId}")
+	public Order getOrderDetails(@PathVariable String orderId) {
+		Order order = null;
+		for(Order myOrder: orderList) {
+			if(myOrder.getOrderId().equals(Integer.parseInt(orderId))) {
+				order = myOrder;
+			}
+		}
+		return order;
+	}
+	
+	@GetMapping("/agent/{agentId}")
+	public Agent getAgentDetails(@PathVariable String agentId) {
+		Agent agent = null;
+		for(Agent myAgent: agentList) {
+			if(myAgent.getAgentId().equals(Integer.parseInt(agentId))) {
+				agent = myAgent;
+			}
+		}
+		return agent;
+	}
+	
+	
 	
 }
