@@ -4,18 +4,25 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Scanner;
 
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 
 import com.springrest.delivery.resources.Agent;
 import com.springrest.delivery.resources.Order;
@@ -25,9 +32,13 @@ public class DeliveryController {
 
 	ArrayList<Agent> agentList = new ArrayList<Agent>();
 	ArrayList<Order> orderList = new ArrayList<Order>();
+	
+	HashMap<Integer,HashMap<Integer,Integer>> priceList = new HashMap<Integer,HashMap<Integer,Integer>>();
+	
 	PriorityQueue<Integer> pendingOrders = new PriorityQueue<Integer>();
 	PriorityQueue<Integer> availableAgents = new PriorityQueue<Integer>();
 	Integer orderNum = 1000;
+	
 	
 	@PostMapping("/addAgent")
 	public HttpStatus addAgent(@RequestBody Agent myInput) {
@@ -40,6 +51,12 @@ public class DeliveryController {
 	@GetMapping("/showAgents")
 	public ArrayList<Agent> showAgents() {
 		return agentList;
+	}
+	
+	
+	@GetMapping("/itemPrice")
+	public HashMap<Integer,HashMap<Integer,Integer>> itemPrice() {
+		return priceList;
 	}
 	
 	@PostMapping("/agentSignIn")
@@ -71,13 +88,8 @@ public class DeliveryController {
 	@PostMapping("/agentSignOut")
 	public HttpStatus agentSignOut(@RequestBody Map<String,Integer> agent) {
 		for(Agent myAgent : agentList) {
-			//System.out.println(myAgent.getAgentId());
-			//System.out.println(agent.get("agentId"));
-			
 			if(myAgent.getAgentId().equals(agent.get("agentId"))) {
-				//System.out.println("hello2");
 				if(myAgent.getAgentState().equals("available")) {
-					//System.out.println("hello3");
 					myAgent.setAgentState("signed-out");
 				}
 			}
@@ -85,11 +97,52 @@ public class DeliveryController {
 		return HttpStatus.CREATED;
 	}
 	
-	@PostMapping("/acceptOrder") 
-	public Map<String,Integer> acceptOrder(@RequestBody Map<String,Integer> orderBody){
-	
-		//Some Logic Communicating with Wallet Service
+	@PostMapping("/requestOrder") 
+	public ResponseEntity<Map<String,Integer>> requestOrder(@RequestBody Map<String,Integer> orderBody){
 		
+		Integer custId = orderBody.get("custId");
+		Integer restId = orderBody.get("restId");
+		Integer itemId = orderBody.get("itemId");
+		Integer qty = orderBody.get("qty");
+		
+		Integer price = priceList.get(restId).get(itemId);
+		Integer billAmount = price*qty;
+		
+		Map<String, Integer> walletMap = new HashMap<>();
+		walletMap.put("custId", custId);
+		walletMap.put("amount", billAmount);
+		
+		String url1 = "http://localhost:8081/deductBalance";
+		RestTemplate restTemplate = new RestTemplate();
+
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_JSON);
+		
+		HttpEntity<Map<String, Integer>> entity1 = new HttpEntity<>(walletMap,headers);
+		
+		try {
+			restTemplate.postForEntity(url1, entity1, String.class);
+		}
+		catch (HttpClientErrorException e) {
+			return ResponseEntity.status(HttpStatus.GONE).body(null);
+		}
+		
+		String url2 = "http://localhost:8080/acceptOrder";
+		Map<String, Integer> RestaurantMap = new HashMap<>();
+		RestaurantMap.put("restId", restId);
+		RestaurantMap.put("itemId", itemId);
+		RestaurantMap.put("qty", qty);
+		HttpEntity<Map<String, Integer>> entity2 = new HttpEntity<>(RestaurantMap,headers);
+
+		try {
+			restTemplate.postForEntity(url2, entity2, String.class);
+		}
+		catch (HttpClientErrorException e) {
+			String url3 = "http://localhost:8081/addBalance"; 
+			restTemplate.postForEntity(url3, entity1, String.class);
+			return ResponseEntity.status(HttpStatus.GONE).body(null);
+		}
+
 		Order order = new Order(orderNum, "unassigned", -1);
 		orderNum = orderNum + 1;
 		if(availableAgents.isEmpty()) {
@@ -108,7 +161,7 @@ public class DeliveryController {
 		}
 		orderList.add(order);
 		
-		return Collections.singletonMap("orderId",order.getOrderId());
+		return ResponseEntity.status(HttpStatus.CREATED).body(Collections.singletonMap("orderId",order.getOrderId()));
 	}
 	
 	@PostMapping("/orderDelivered")
@@ -119,12 +172,24 @@ public class DeliveryController {
 				if(myOrder.getStatus() == "assigned") {
 					myOrder.setStatus("delivered");
 					Integer agentId = myOrder.getAgentId();
-					for(Agent myAgent: agentList) {
-						if(myAgent.getAgentId().equals(agentId)) {
-							myAgent.setAgentState("available");
-							availableAgents.add(myAgent.getAgentId());
+					if(!pendingOrders.isEmpty()) {
+						Integer orderId = pendingOrders.poll();
+						for(Order myOrder1: orderList) {
+							if(myOrder1.getOrderId().equals(orderId)) {
+								myOrder1.setStatus("assigned");
+								myOrder1.setAgentId(agentId);
+							}
 						}
 					}
+					else {
+						for(Agent myAgent: agentList) {
+							if(myAgent.getAgentId().equals(agentId)) {
+								myAgent.setAgentState("available");
+								availableAgents.add(myAgent.getAgentId());
+							}
+						}
+					}
+					
 				}
 			}
 		}
@@ -134,6 +199,12 @@ public class DeliveryController {
 	
 	@PostMapping("/reInitialize")
 	public HttpStatus reInitialize() {
+		
+		
+		orderNum = 1000;
+		orderList.removeAll(orderList);
+		pendingOrders.clear();
+		availableAgents.clear();
 		
 		File myFile = new File("/Users/fluffy/Downloads/delivery/initialData.txt");
 		Scanner s1 = null;
@@ -166,6 +237,35 @@ public class DeliveryController {
 	public HttpStatus StartUp() {
 			
 			File myFile = new File("/Users/fluffy/Downloads/delivery/initialData.txt");
+			Scanner s = null;
+			try {
+				s = new Scanner(myFile);
+			} catch (FileNotFoundException e) {
+				e.printStackTrace();
+			}
+			
+			while(s.hasNextLine()) {
+				Scanner s2 = new Scanner(s.nextLine());
+				String str1 = s2.next();
+				if(str1.charAt(0) == '*') {
+					break;
+				}
+				String str2 = s2.next();
+				Integer restId = Integer.parseInt(str1);
+				Integer numItem = Integer.parseInt(str2);
+				HashMap<Integer,Integer> innerMap = new HashMap<Integer,Integer>();
+				for(int i=0; i<numItem; i++) {
+					Scanner s3 = new Scanner(s.nextLine());
+					Integer itemId = Integer.parseInt(s3.next());
+					Integer price = Integer.parseInt(s3.next()); 
+					s3.next(); //skipping over quantity
+					innerMap.put(itemId,price);
+					System.out.println("Done");
+				}
+				priceList.put(restId, innerMap);
+			}
+			
+			
 			Scanner s1 = null;
 			try {
 				s1 = new Scanner(myFile);
@@ -213,7 +313,4 @@ public class DeliveryController {
 		}
 		return agent;
 	}
-	
-	
-	
 }
