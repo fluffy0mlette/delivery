@@ -2,11 +2,11 @@ package com.springrest.delivery.resources;
 
 public class Agent {
 	private Integer agentId;
-	private String agentState;
-	public Agent(Integer agentId, String agentState) {
+	private String status;
+	public Agent(Integer agentId, String status) {
 		super();
 		this.agentId = agentId;
-		this.agentState = agentState;
+		this.status = status;
 	}
 	public Agent() {
 		super();
@@ -18,15 +18,15 @@ public class Agent {
 	public void setAgentId(Integer agentId) {
 		this.agentId = agentId;
 	}
-	public String getAgentState() {
-		return agentState;
+	public String getStatus() {
+		return status;
 	}
-	public void setAgentState(String agentState) {
-		this.agentState = agentState;
+	public void setStatus(String status) {
+		this.status = status;
 	}
 	@Override
 	public String toString() {
-		return "Agent [agentId=" + agentId + ", agentState=" + agentState + "]";
+		return "Agent [agentId=" + agentId + ", status=" + status + "]";
 	}
 	
 	

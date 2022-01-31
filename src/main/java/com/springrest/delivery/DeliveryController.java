@@ -60,12 +60,12 @@ public class DeliveryController {
 	}
 	
 	@PostMapping("/agentSignIn")
-	public HttpStatus agentSignIn(@RequestBody Map<String,Integer> agent) {
+	public ResponseEntity<String> agentSignIn(@RequestBody Map<String,Integer> agent) {
 		for(Agent myAgent : agentList) {
 			if(myAgent.getAgentId().equals(agent.get("agentId"))) {
-				if(myAgent.getAgentState() == "signed-out") {
+				if(myAgent.getStatus() == "signed-out") {
 					if(pendingOrders.isEmpty()) { //order pending
-						myAgent.setAgentState("available");
+						myAgent.setStatus("available");
 						availableAgents.add(myAgent.getAgentId());
 					}
 					else  { 
@@ -76,21 +76,21 @@ public class DeliveryController {
 								myOrder.setAgentId(agent.get("agentId"));
 							}
 						}
-						myAgent.setAgentState("unavailable");
+						myAgent.setStatus("unavailable");
 					}
 				}
 				break;
 			}
 		}
-		return HttpStatus.CREATED;
+		return ResponseEntity.status(HttpStatus.CREATED).body("CREATED");
 	}
 	
 	@PostMapping("/agentSignOut")
 	public HttpStatus agentSignOut(@RequestBody Map<String,Integer> agent) {
 		for(Agent myAgent : agentList) {
 			if(myAgent.getAgentId().equals(agent.get("agentId"))) {
-				if(myAgent.getAgentState().equals("available")) {
-					myAgent.setAgentState("signed-out");
+				if(myAgent.getStatus().equals("available")) {
+					myAgent.setStatus("signed-out");
 				}
 			}
 		}
@@ -112,7 +112,7 @@ public class DeliveryController {
 		walletMap.put("custId", custId);
 		walletMap.put("amount", billAmount);
 		
-		String url1 = "http://localhost:8081/deductBalance";
+		String url1 = "http://localhost:8082/deductBalance";
 		RestTemplate restTemplate = new RestTemplate();
 
 		HttpHeaders headers = new HttpHeaders();
@@ -138,7 +138,7 @@ public class DeliveryController {
 			restTemplate.postForEntity(url2, entity2, String.class);
 		}
 		catch (HttpClientErrorException e) {
-			String url3 = "http://localhost:8081/addBalance"; 
+			String url3 = "http://localhost:8082/addBalance"; 
 			restTemplate.postForEntity(url3, entity1, String.class);
 			return ResponseEntity.status(HttpStatus.GONE).body(null);
 		}
@@ -155,7 +155,7 @@ public class DeliveryController {
 			
 			for(Agent agent: agentList) {
 				if(agent.getAgentId().equals(agentId)) {
-					agent.setAgentState("unavailable");
+					agent.setStatus("unavailable");
 				}
 			}
 		}
@@ -165,7 +165,7 @@ public class DeliveryController {
 	}
 	
 	@PostMapping("/orderDelivered")
-	public HttpStatus orderDelivered(@RequestBody Map<String, Integer> order) {
+	public ResponseEntity<String> orderDelivered(@RequestBody Map<String, Integer> order) {
 		
 		for(Order myOrder: orderList) {
 			if(myOrder.getOrderId().equals(order.get("orderId"))) {
@@ -184,7 +184,7 @@ public class DeliveryController {
 					else {
 						for(Agent myAgent: agentList) {
 							if(myAgent.getAgentId().equals(agentId)) {
-								myAgent.setAgentState("available");
+								myAgent.setStatus("available");
 								availableAgents.add(myAgent.getAgentId());
 							}
 						}
@@ -194,17 +194,18 @@ public class DeliveryController {
 			}
 		}
 		
-		return HttpStatus.CREATED;
+		return ResponseEntity.status(HttpStatus.CREATED).body("CREATED");
 	}
 	
 	@PostMapping("/reInitialize")
-	public HttpStatus reInitialize() {
+	public ResponseEntity<String> reInitialize() {
 		
 		
 		orderNum = 1000;
 		orderList.removeAll(orderList);
 		pendingOrders.clear();
 		availableAgents.clear();
+		agentList.removeAll(agentList);
 		
 		File myFile = new File("/Users/fluffy/Downloads/delivery/initialData.txt");
 		Scanner s1 = null;
@@ -230,7 +231,7 @@ public class DeliveryController {
 			agentList.add(agent);
 		}
 
-		return HttpStatus.CREATED;	
+		return ResponseEntity.status(HttpStatus.CREATED).body("CREATED");	
 	}
 	
 	@EventListener(ApplicationReadyEvent.class)
@@ -293,24 +294,27 @@ public class DeliveryController {
 		}
 	
 	@GetMapping("/order/{orderId}")
-	public Order getOrderDetails(@PathVariable String orderId) {
+	public ResponseEntity<Order> getOrderDetails(@PathVariable String orderId) {
 		Order order = null;
 		for(Order myOrder: orderList) {
 			if(myOrder.getOrderId().equals(Integer.parseInt(orderId))) {
 				order = myOrder;
 			}
 		}
-		return order;
+		
+		if(order == null)
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+		return ResponseEntity.status(HttpStatus.OK).body(order);
 	}
 	
 	@GetMapping("/agent/{agentId}")
-	public Agent getAgentDetails(@PathVariable String agentId) {
+	public ResponseEntity<Agent> getAgentDetails(@PathVariable String agentId) {
 		Agent agent = null;
 		for(Agent myAgent: agentList) {
 			if(myAgent.getAgentId().equals(Integer.parseInt(agentId))) {
 				agent = myAgent;
 			}
 		}
-		return agent;
+		return ResponseEntity.status(HttpStatus.OK).body(agent);
 	}
 }
