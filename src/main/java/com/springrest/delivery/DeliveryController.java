@@ -86,7 +86,7 @@ public class DeliveryController {
 	}
 	
 	@PostMapping("/agentSignOut")
-	public HttpStatus agentSignOut(@RequestBody Map<String,Integer> agent) {
+	public ResponseEntity<String> agentSignOut(@RequestBody Map<String,Integer> agent) {
 		for(Agent myAgent : agentList) {
 			if(myAgent.getAgentId().equals(agent.get("agentId"))) {
 				if(myAgent.getStatus().equals("available")) {
@@ -94,7 +94,7 @@ public class DeliveryController {
 				}
 			}
 		}
-		return HttpStatus.CREATED;
+		return ResponseEntity.status(HttpStatus.CREATED).body("CREATED");
 	}
 	
 	@PostMapping("/requestOrder") 
@@ -207,7 +207,9 @@ public class DeliveryController {
 		availableAgents.clear();
 		agentList.removeAll(agentList);
 		
-		File myFile = new File("/Users/fluffy/Downloads/delivery/initialData.txt");
+		//File myFile = new File("/Users/fluffy/Downloads/delivery/initialData.txt");
+		String basePath = new File("").getAbsolutePath();
+		File myFile = new File(basePath + "/initialData.txt");
 		Scanner s1 = null;
 		try {
 			s1 = new Scanner(myFile);
@@ -237,7 +239,9 @@ public class DeliveryController {
 	@EventListener(ApplicationReadyEvent.class)
 	public HttpStatus StartUp() {
 			
-			File myFile = new File("/Users/fluffy/Downloads/delivery/initialData.txt");
+			//File myFile = new File("/Users/fluffy/Downloads/delivery/initialData.txt");
+			String basePath = new File("").getAbsolutePath();
+			File myFile = new File(basePath + "/initialData.txt");
 			Scanner s = null;
 			try {
 				s = new Scanner(myFile);
